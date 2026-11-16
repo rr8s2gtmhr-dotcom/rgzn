@@ -12,8 +12,8 @@ export const SITE_VICE_TITLE = '南宁铁路局';
 export const SITE_VICE_TITLE_MSG = '守护线路安全，共建平安铁路';
 
 /** 固定站点文案，防止被本地缓存或后端旧数据覆盖 */
-({ ...config, globalTitle: SITE_TITLE, globalViceTitle: SITE_VICE_TITLE, globalViceTitleMsg: SITE_VICE_TITLE_MSG,
-   isCollapse: false, wartermarkText: '南宁铁路局' }) as T;
+const withFixedSiteText = <T extends Record<string, any>>(config: T): T =>
+	({ ...config, globalTitle: SITE_TITLE, globalViceTitle: SITE_VICE_TITLE, globalViceTitleMsg: SITE_VICE_TITLE_MSG }) as T;
 
 
 /**
