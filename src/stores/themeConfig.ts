@@ -1,4 +1,19 @@
 import { defineStore } from 'pinia';
+import { useSettingsApi } from '/@/api/settings';
+import { Session } from '/@/utils/storage';
+
+let saveTimer: ReturnType<typeof setTimeout> | null = null;
+
+/** 站点主标题（浏览器标签、左上角 Logo、登录页标题共用，固定不可被缓存覆盖） */
+export const SITE_TITLE = '南宁局';
+/** 登录页左上角标题 */
+export const SITE_VICE_TITLE = '南宁铁路局';
+/** 登录页左上角标语 */
+export const SITE_VICE_TITLE_MSG = '守护线路安全，共建平安铁路';
+
+/** 固定站点文案，防止被本地缓存或后端旧数据覆盖 */
+const withFixedSiteText = <T extends Record<string, any>>(config: T): T =>
+	({ ...config, globalTitle: SITE_TITLE, globalViceTitle: SITE_VICE_TITLE, globalViceTitleMsg: SITE_VICE_TITLE_MSG }) as T;
 
 /**
  * 布局配置
@@ -137,11 +152,11 @@ export const useThemeConfig = defineStore('themeConfig', {
 			 * 全局网站标题 / 副标题
 			 */
 			// 网站主标题（菜单导航、浏览器当前网页标题）
-			globalTitle: 'vue-next-admin',
+			globalTitle: SITE_TITLE,
 			// 网站副标题（登录页顶部文字）
-			globalViceTitle: 'vueNextAdmin',
+			globalViceTitle: SITE_VICE_TITLE,
 			// 网站副标题（登录页顶部文字）
-			globalViceTitleMsg: '专注、免费、开源、维护、解疑',
+			globalViceTitleMsg: SITE_VICE_TITLE_MSG,
 			// 默认初始语言，可选值"<zh-cn|en|zh-tw>"，默认 zh-cn
 			globalI18n: 'zh-cn',
 			// 默认全局组件大小，可选值"<large|'default'|small>"，默认 'large'
@@ -150,7 +165,26 @@ export const useThemeConfig = defineStore('themeConfig', {
 	}),
 	actions: {
 		setThemeConfig(data: ThemeConfigState) {
-			this.themeConfig = data.themeConfig;
+			this.themeConfig = withFixedSiteText(data.themeConfig);
+			this.scheduleSave();
+		},
+		async loadFromApi() {
+			if (!Session.get('token')) return;
+			try {
+				const res = await useSettingsApi().getTheme();
+				if (res.data && Object.keys(res.data).length) {
+					this.themeConfig = withFixedSiteText({ ...this.themeConfig, ...res.data }) as ThemeConfigState['themeConfig'];
+				}
+			} catch {
+				// 接口异常时沿用默认配置
+			}
+		},
+		scheduleSave() {
+			if (!Session.get('token')) return;
+			if (saveTimer) clearTimeout(saveTimer);
+			saveTimer = setTimeout(() => {
+				useSettingsApi().saveTheme(this.themeConfig).catch(() => {});
+			}, 500);
 		},
 	},
 });

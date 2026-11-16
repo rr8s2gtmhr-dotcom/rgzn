@@ -20,7 +20,7 @@ service.interceptors.request.use(
 	(config) => {
 		// 在发送请求之前做些什么 token
 		if (Session.get('token')) {
-			config.headers!['Authorization'] = `${Session.get('token')}`;
+			config.headers!['Authorization'] = `Bearer ${Session.get('token')}`;
 		}
 		return config;
 	},
@@ -50,15 +50,20 @@ service.interceptors.response.use(
 		}
 	},
 	(error) => {
-		// 对响应错误做点什么
-		if (error.message.indexOf('timeout') != -1) {
-			ElMessage.error('网络超时');
-		} else if (error.message == 'Network Error') {
-			ElMessage.error('网络连接错误');
-		} else {
-			if (error.response.data) ElMessage.error(error.response.statusText);
-			else ElMessage.error('接口路径找不到');
+		const status = error.response?.status;
+		if (status === 401) {
+			Session.clear();
+			ElMessageBox.alert('登录已过期，请重新登录', '提示', {}).finally(() => {
+				window.location.href = '/';
+			});
+			return Promise.reject(error);
 		}
+		const detail = error.response?.data?.detail;
+		const message = typeof detail === 'string' ? detail : error.response?.statusText;
+		if (error.message.indexOf('timeout') != -1) ElMessage.error('网络超时');
+		else if (error.message == 'Network Error') ElMessage.error('网络连接错误');
+		else if (message) ElMessage.error(message);
+		else ElMessage.error('接口路径找不到');
 		return Promise.reject(error);
 	}
 );

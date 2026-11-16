@@ -1,146 +1,117 @@
 <template>
 	<div class="system-role-container layout-padding">
-		<div class="system-role-padding layout-padding-auto layout-padding-view">
-			<div class="system-user-search mb15">
-				<el-input v-model="state.tableData.param.search" size="default" placeholder="请输入角色名称" style="max-width: 180px"> </el-input>
-				<el-button size="default" type="primary" class="ml10">
-					<el-icon>
-						<ele-Search />
-					</el-icon>
-					查询
-				</el-button>
-				<el-button size="default" type="success" class="ml10" @click="onOpenAddRole('add')">
-					<el-icon>
-						<ele-FolderAdd />
-					</el-icon>
-					新增角色
-				</el-button>
+		<div class="system-role-padding layout-padding-view layout-padding-auto">
+			<div class="system-role-actions mb15">
+				<el-button type="success" @click="onAdd">新增角色</el-button>
 			</div>
-			<el-table :data="state.tableData.data" v-loading="state.tableData.loading" style="width: 100%">
-				<el-table-column type="index" label="序号" width="60" />
-				<el-table-column prop="roleName" label="角色名称" show-overflow-tooltip></el-table-column>
-				<el-table-column prop="roleSign" label="角色标识" show-overflow-tooltip></el-table-column>
-				<el-table-column prop="sort" label="排序" show-overflow-tooltip></el-table-column>
-				<el-table-column prop="status" label="角色状态" show-overflow-tooltip>
-					<template #default="scope">
-						<el-tag type="success" v-if="scope.row.status">启用</el-tag>
-						<el-tag type="info" v-else>禁用</el-tag>
-					</template>
-				</el-table-column>
-				<el-table-column prop="describe" label="角色描述" show-overflow-tooltip></el-table-column>
-				<el-table-column prop="createTime" label="创建时间" show-overflow-tooltip></el-table-column>
-				<el-table-column label="操作" width="100">
-					<template #default="scope">
-						<el-button :disabled="scope.row.roleName === '超级管理员'" size="small" text type="primary" @click="onOpenEditRole('edit', scope.row)"
-							>修改</el-button
-						>
-						<el-button :disabled="scope.row.roleName === '超级管理员'" size="small" text type="primary" @click="onRowDel(scope.row)">删除</el-button>
-					</template>
-				</el-table-column>
-			</el-table>
-			<el-pagination
-				@size-change="onHandleSizeChange"
-				@current-change="onHandleCurrentChange"
-				class="mt15"
-				:pager-count="5"
-				:page-sizes="[10, 20, 30]"
-				v-model:current-page="state.tableData.param.pageNum"
-				background
-				v-model:page-size="state.tableData.param.pageSize"
-				layout="total, sizes, prev, pager, next, jumper"
-				:total="state.tableData.total"
-			>
-			</el-pagination>
+			<Table
+				ref="tableRef"
+				:data="state.tableData.data"
+				:header="state.tableData.header"
+				:config="state.tableData.config"
+				class="system-role-table"
+				@delRow="onDelRow"
+				@editRow="onEditRow"
+				@pageChange="onPageChange"
+				@sortHeader="onSortHeader"
+			/>
+			<RoleDialog v-model="state.dialogVisible" :initial="state.editing" :menus="state.menus" @submit="onDialogSubmit" />
 		</div>
-		<RoleDialog ref="roleDialogRef" @refresh="getTableData()" />
 	</div>
 </template>
 
 <script setup lang="ts" name="systemRole">
-import { defineAsyncComponent, reactive, onMounted, ref } from 'vue';
-import { ElMessageBox, ElMessage } from 'element-plus';
+import { defineAsyncComponent, reactive, ref, onMounted } from 'vue';
+import { ElMessage } from 'element-plus';
+import { useBusinessCrud } from '/@/utils/businessCrud';
+import { refreshFrontEndRoutes } from '/@/router/frontEnd';
 
-// 引入组件
+const Table = defineAsyncComponent(() => import('/@/components/table/index.vue'));
 const RoleDialog = defineAsyncComponent(() => import('/@/views/system/role/dialog.vue'));
 
-// 定义变量内容
-const roleDialogRef = ref();
-const state = reactive<SysRoleState>({
+const crud = useBusinessCrud('roles');
+const tableRef = ref<RefType>();
+const state = reactive<BusinessTableState & { dialogVisible: boolean; editing: EmptyObjectType; menus: EmptyObjectType[] }>({
+	dialogVisible: false,
+	editing: {},
+	menus: [],
 	tableData: {
 		data: [],
-		total: 0,
-		loading: false,
-		param: {
-			search: '',
-			pageNum: 1,
-			pageSize: 10,
+		header: [
+			{ key: 'roleName', colWidth: '', title: '角色名称', type: 'text', width: '', isCheck: true },
+			{ key: 'dataScope', colWidth: '', title: '数据范围', type: 'text', width: '', isCheck: true },
+		],
+		config: {
+			total: 0,
+			loading: false,
+			isBorder: false,
+			isSelection: false,
+			isSerialNo: true,
+			isOperate: true,
+			isEdit: true,
+			disableDeleteConfirm: true,
 		},
+		search: [],
+		param: { pageNum: 1, pageSize: 10 },
 	},
 });
-// 初始化表格数据
-const getTableData = () => {
+
+const getTableData = async () => {
 	state.tableData.loading = true;
-	const data = [];
-	for (let i = 0; i < 20; i++) {
-		data.push({
-			roleName: i === 0 ? '超级管理员' : '普通用户',
-			roleSign: i === 0 ? 'admin' : 'common',
-			describe: `测试角色${i + 1}`,
-			sort: i,
-			status: true,
-			createTime: new Date().toLocaleString(),
-		});
-	}
-	state.tableData.data = data;
-	state.tableData.total = state.tableData.data.length;
-	setTimeout(() => {
+	try {
+		const [{ rows, total }, menus] = await Promise.all([crud.page(state.tableData.param), crud.api.list('menus')]);
+		state.tableData.data = rows;
+		state.tableData.config.total = total;
+		state.menus = (menus.data as any[]) || [];
+	} finally {
 		state.tableData.loading = false;
-	}, 500);
+	}
 };
-// 打开新增角色弹窗
-const onOpenAddRole = (type: string) => {
-	roleDialogRef.value.openDialog(type);
+const onPageChange = (page: TableDemoPageType) => {
+	state.tableData.param.pageNum = page.pageNum;
+	state.tableData.param.pageSize = page.pageSize;
 };
-// 打开修改角色弹窗
-const onOpenEditRole = (type: string, row: Object) => {
-	roleDialogRef.value.openDialog(type, row);
+const onSortHeader = (data: TableHeaderType[]) => {
+	state.tableData.header = data;
 };
-// 删除角色
-const onRowDel = (row: RowRoleType) => {
-	ElMessageBox.confirm(`此操作将永久删除角色名称：“${row.roleName}”，是否继续?`, '提示', {
-		confirmButtonText: '确认',
-		cancelButtonText: '取消',
-		type: 'warning',
-	})
-		.then(() => {
-			getTableData();
-			ElMessage.success('删除成功');
-		})
-		.catch(() => {});
+const onAdd = () => {
+	state.editing = {};
+	state.dialogVisible = true;
 };
-// 分页改变
-const onHandleSizeChange = (val: number) => {
-	state.tableData.param.pageSize = val;
+const onEditRow = (row: EmptyObjectType) => {
+	state.editing = { ...row };
+	state.dialogVisible = true;
+};
+const onDialogSubmit = async (form: EmptyObjectType) => {
+	await crud.submit(form);
+	await refreshFrontEndRoutes();
 	getTableData();
 };
-// 分页改变
-const onHandleCurrentChange = (val: number) => {
-	state.tableData.param.pageNum = val;
-	getTableData();
+const onDelRow = async (row: EmptyObjectType) => {
+	if (row.code === 'admin') {
+		ElMessage.warning('管理员角色不可删除');
+		return;
+	}
+	try {
+		await crud.remove(row, `角色 ${row.roleName}`);
+		await refreshFrontEndRoutes();
+		getTableData();
+	} catch {
+		// 用户取消删除
+	}
 };
-// 页面加载时
-onMounted(() => {
-	getTableData();
-});
+
+onMounted(getTableData);
 </script>
 
 <style scoped lang="scss">
 .system-role-container {
 	.system-role-padding {
 		padding: 15px;
-		.el-table {
-			flex: 1;
-		}
+	}
+	.system-role-table {
+		flex: 1;
+		overflow: hidden;
 	}
 }
 </style>

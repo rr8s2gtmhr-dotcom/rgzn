@@ -5,9 +5,26 @@ import { dynamicRoutes, notFoundAndNoPower } from '/@/router/route';
 import pinia from '/@/stores/index';
 import { Session } from '/@/utils/storage';
 import { useUserInfo } from '/@/stores/userInfo';
+import { useThemeConfig } from '/@/stores/themeConfig';
 import { useTagsViewRoutes } from '/@/stores/tagsViewRoutes';
 import { useRoutesList } from '/@/stores/routesList';
+import { toRouteRecords } from '/@/utils/menuHelper';
 import { NextLoading } from '/@/utils/loading';
+import { useResourceApi } from '/@/api/resource';
+import type { LocalMenu } from '/@/types/api';
+
+let cachedMenus: LocalMenu[] = [];
+
+async function fetchMenus(): Promise<LocalMenu[]> {
+	if (cachedMenus.length) return cachedMenus;
+	const res = await useResourceApi().list('menus');
+	cachedMenus = (res.data as LocalMenu[]) || [];
+	return cachedMenus;
+}
+
+export function clearMenuCache() {
+	cachedMenus = [];
+}
 
 // 前端控制路由
 
@@ -26,6 +43,8 @@ export async function initFrontEndControlRoutes() {
 	// 触发初始化用户信息 pinia
 	// https://gitee.com/lyt-top/vue-next-admin/issues/I5F1HP
 	await useUserInfo(pinia).setUserInfos();
+	// 从后端加载当前用户的主题配置
+	await useThemeConfig(pinia).loadFromApi();
 	// 无登录权限时，添加判断
 	// https://gitee.com/lyt-top/vue-next-admin/issues/I64HVO
 	if (useUserInfo().userInfos.roles.length <= 0) return Promise.resolve(true);
@@ -42,7 +61,8 @@ export async function initFrontEndControlRoutes() {
  * @link 参考：https://next.router.vuejs.org/zh/api/#addroute
  */
 export async function setAddRoute() {
-	await setFilterRouteEnd().forEach((route: RouteRecordRaw) => {
+	const routes = await setFilterRouteEnd();
+	routes.forEach((route: RouteRecordRaw) => {
 		router.addRoute(route);
 	});
 }
@@ -54,10 +74,27 @@ export async function setAddRoute() {
  * @link 参考：https://next.router.vuejs.org/zh/api/#push
  */
 export async function frontEndsResetRoute() {
-	await setFilterRouteEnd().forEach((route: RouteRecordRaw) => {
+	const routes = await setFilterRouteEnd();
+	routes.forEach((route: RouteRecordRaw) => {
 		const routeName: any = route.name;
 		router.hasRoute(routeName) && router.removeRoute(routeName);
 	});
+}
+
+/**
+ * 菜单或权限变化后重置动态路由、用户信息和菜单缓存
+ */
+export async function refreshFrontEndRoutes() {
+	const staticNames = ['login', 'notFound', 'noPower'];
+	router.getRoutes().forEach((route) => {
+		const name = route.name ? String(route.name) : '';
+		if (name && !staticNames.includes(name) && router.hasRoute(name)) router.removeRoute(name);
+	});
+	Session.remove('userInfo');
+	clearMenuCache();
+	await useUserInfo(pinia).setUserInfos();
+	await setAddRoute();
+	setFilterMenuAndCacheTagsViewRoutes();
 }
 
 /**
@@ -65,8 +102,10 @@ export async function frontEndsResetRoute() {
  * @description 替换 dynamicRoutes（/@/router/route）第一个顶级 children 的路由
  * @returns 返回替换后的路由数组
  */
-export function setFilterRouteEnd() {
-	let filterRouteEnd: any = formatTwoStageRoutes(formatFlatteningRoutes(dynamicRoutes));
+export async function setFilterRouteEnd() {
+	const localMenus = await fetchMenus();
+	const routes = [{ ...dynamicRoutes[0], children: toRouteRecords(localMenus) }];
+	let filterRouteEnd: any = formatTwoStageRoutes(formatFlatteningRoutes(routes));
 	// notFoundAndNoPower 防止 404、401 不在 layout 布局中，不设置的话，404、401 界面将全屏显示
 	// 关联问题 No match found for location with path 'xxx'
 	filterRouteEnd[0].children = [...setFilterRoute(filterRouteEnd[0].children), ...notFoundAndNoPower];

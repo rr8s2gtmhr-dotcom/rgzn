@@ -36,9 +36,55 @@
 					</template>
 				</template>
 			</el-table-column>
-			<el-table-column label="操作" width="100" v-if="config.isOperate">
+			<el-table-column :label="config.enableHeaderColumnSetting ? '操作　' : '操作'" :width="config.isEdit ? 120 : 100" v-if="config.isOperate">
+				<template #header>
+					<span class="table-operate-header">
+						<span>操作</span>
+						<el-popover
+							v-if="config.enableHeaderColumnSetting"
+							placement="bottom-end"
+							trigger="click"
+							transition="el-zoom-in-top"
+							popper-class="table-tool-popper"
+							:width="300"
+							:persistent="false"
+							v-model:visible="state.headerPopoverVisible"
+							@show="onSetTable('header')"
+						>
+							<template #reference>
+								<span class="table-operate-arrow">▾</span>
+							</template>
+							<template #default>
+								<div class="tool-box">
+									<el-tooltip content="拖动进行排序" placement="top-start">
+										<SvgIcon name="fa fa-question-circle-o" :size="17" class="ml11" color="#909399" />
+									</el-tooltip>
+									<el-checkbox
+										v-model="state.checkListAll"
+										:indeterminate="state.checkListIndeterminate"
+										class="ml10 mr1"
+										label="列显示"
+										@change="onCheckAllChange"
+									/>
+									<el-checkbox v-model="getConfig.isSerialNo" class="ml12 mr1" label="序号" />
+									<el-checkbox v-model="getConfig.isSelection" class="ml12 mr1" label="多选" />
+								</div>
+								<el-scrollbar>
+									<div ref="headerToolSetRef" class="tool-sortable">
+										<div class="tool-sortable-item" v-for="v in header" :key="v.key" :data-key="v.key">
+											<i class="fa fa-arrows-alt handle cursor-pointer"></i>
+											<el-checkbox v-model="v.isCheck" size="default" class="ml12 mr8" :label="v.title" @change="onCheckChange" />
+										</div>
+									</div>
+								</el-scrollbar>
+							</template>
+						</el-popover>
+					</span>
+				</template>
 				<template v-slot="scope">
-					<el-popconfirm title="确定删除吗？" @confirm="onDelRow(scope.row)">
+					<el-button v-if="config.isEdit" class="table-operate-edit" text type="primary" @click="onEditRow(scope.row)">修改</el-button>
+					<el-button v-if="config.disableDeleteConfirm" text type="primary" @click="onDelRow(scope.row)">删除</el-button>
+					<el-popconfirm v-else title="确定删除吗？" @confirm="onDelRow(scope.row)">
 						<template #reference>
 							<el-button text type="primary">删除</el-button>
 						</template>
@@ -73,7 +119,7 @@
 					popper-class="table-tool-popper"
 					:width="300"
 					:persistent="false"
-					@show="onSetTable"
+					@show="onSetTable('footer')"
 				>
 					<template #reference>
 						<SvgIcon name="iconfont icon-quanjushezhi_o" :size="22" title="设置" />
@@ -143,10 +189,11 @@ const props = defineProps({
 });
 
 // 定义子组件向父组件传值/事件
-const emit = defineEmits(['delRow', 'pageChange', 'sortHeader']);
+const emit = defineEmits(['delRow', 'editRow', 'pageChange', 'sortHeader']);
 
 // 定义变量内容
 const toolSetRef = ref();
+const headerToolSetRef = ref();
 const storesThemeConfig = useThemeConfig();
 const { themeConfig } = storeToRefs(storesThemeConfig);
 const state = reactive({
@@ -157,6 +204,7 @@ const state = reactive({
 	selectlist: [] as EmptyObjectType[],
 	checkListAll: true,
 	checkListIndeterminate: false,
+	headerPopoverVisible: false,
 });
 
 // 设置边框显示/隐藏
@@ -186,6 +234,10 @@ const onCheckChange = () => {
 // 表格多选改变时，用于导出
 const onSelectionChange = (val: EmptyObjectType[]) => {
 	state.selectlist = val;
+};
+// 修改当前项
+const onEditRow = (row: EmptyObjectType) => {
+	emit('editRow', row);
 };
 // 删除当前项
 const onDelRow = (row: EmptyObjectType) => {
@@ -248,9 +300,11 @@ const onRefreshTable = () => {
 	emit('pageChange', state.page);
 };
 // 设置
-const onSetTable = () => {
+const onSetTable = (target: 'footer' | 'header' = 'footer') => {
 	nextTick(() => {
-		const sortable = Sortable.create(toolSetRef.value, {
+		const targetRef = target === 'header' ? headerToolSetRef.value : toolSetRef.value;
+		if (!targetRef) return;
+		const sortable = Sortable.create(targetRef, {
 			handle: '.handle',
 			dataIdAttr: 'data-key',
 			animation: 150,
@@ -279,6 +333,20 @@ defineExpose({
 	flex-direction: column;
 	.el-table {
 		flex: 1;
+	}
+	.table-operate-edit {
+		margin-right: 8px;
+	}
+	.table-operate-header {
+		display: inline-flex;
+		align-items: center;
+		gap: 4px;
+	}
+	.table-operate-arrow {
+		display: inline-block;
+		color: var(--el-color-primary);
+		cursor: pointer;
+		font-size: 12px;
 	}
 	.table-footer {
 		display: flex;

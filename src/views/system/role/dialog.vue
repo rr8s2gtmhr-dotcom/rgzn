@@ -1,236 +1,102 @@
 <template>
-	<div class="system-role-dialog-container">
-		<el-dialog :title="state.dialog.title" v-model="state.dialog.isShowDialog" width="769px">
-			<el-form ref="roleDialogFormRef" :model="state.ruleForm" size="default" label-width="90px">
-				<el-row :gutter="35">
-					<el-col :xs="24" :sm="12" :md="12" :lg="12" :xl="12" class="mb20">
-						<el-form-item label="角色名称">
-							<el-input v-model="state.ruleForm.roleName" placeholder="请输入角色名称" clearable></el-input>
-						</el-form-item>
-					</el-col>
-					<el-col :xs="24" :sm="12" :md="12" :lg="12" :xl="12" class="mb20">
-						<el-form-item label="角色标识">
-							<template #label>
-								<el-tooltip effect="dark" content="用于 `router/route.ts` meta.roles" placement="top-start">
-									<span>角色标识</span>
-								</el-tooltip>
-							</template>
-							<el-input v-model="state.ruleForm.roleSign" placeholder="请输入角色标识" clearable></el-input>
-						</el-form-item>
-					</el-col>
-					<el-col :xs="24" :sm="12" :md="12" :lg="12" :xl="12" class="mb20">
-						<el-form-item label="排序">
-							<el-input-number v-model="state.ruleForm.sort" :min="0" :max="999" controls-position="right" placeholder="请输入排序" class="w100" />
-						</el-form-item>
-					</el-col>
-					<el-col :xs="24" :sm="12" :md="12" :lg="12" :xl="12" class="mb20">
-						<el-form-item label="角色状态">
-							<el-switch v-model="state.ruleForm.status" inline-prompt active-text="启" inactive-text="禁"></el-switch>
-						</el-form-item>
-					</el-col>
-					<el-col :xs="24" :sm="24" :md="24" :lg="24" :xl="24" class="mb20">
-						<el-form-item label="角色描述">
-							<el-input v-model="state.ruleForm.describe" type="textarea" placeholder="请输入角色描述" maxlength="150"></el-input>
-						</el-form-item>
-					</el-col>
-					<el-col :xs="24" :sm="24" :md="24" :lg="24" :xl="24" class="mb20">
-						<el-form-item label="菜单权限">
-							<el-tree :data="state.menuData" :props="state.menuProps" show-checkbox class="menu-data-tree" />
-						</el-form-item>
-					</el-col>
-				</el-row>
-			</el-form>
-			<template #footer>
-				<span class="dialog-footer">
-					<el-button @click="onCancel" size="default">取 消</el-button>
-					<el-button type="primary" @click="onSubmit" size="default">{{ state.dialog.submitTxt }}</el-button>
-				</span>
-			</template>
-		</el-dialog>
-	</div>
+	<el-dialog v-model="visible" :title="initial.id ? '修改角色' : '新增角色'" width="680px" destroy-on-close>
+		<el-form ref="formRef" :model="form" :rules="rules" label-width="100px" size="default">
+			<el-form-item label="角色名称" prop="roleName">
+				<el-input v-model="form.roleName" placeholder="请输入角色名称" clearable />
+			</el-form-item>
+			<el-form-item label="数据范围" prop="dataScope">
+				<el-select v-model="form.dataScope" placeholder="请选择数据范围" style="width: 100%">
+					<el-option label="全部" value="全部" />
+					<el-option label="本单位" value="本单位" />
+					<el-option label="本部门" value="本部门" />
+					<el-option label="仅本人" value="仅本人" />
+				</el-select>
+			</el-form-item>
+			<el-form-item label="菜单权限">
+				<el-tree
+					ref="treeRef"
+					:data="treeData"
+					node-key="path"
+					show-checkbox
+					default-expand-all
+					:props="{ label: 'label', children: 'children' }"
+				/>
+			</el-form-item>
+			<el-form-item label="按钮权限">
+				<el-checkbox-group v-model="form.btnPermissions">
+					<el-checkbox v-for="item in buttonPermissions" :key="item" :label="item" />
+				</el-checkbox-group>
+			</el-form-item>
+		</el-form>
+		<template #footer>
+			<el-button @click="visible = false">取 消</el-button>
+			<el-button type="primary" @click="onSubmit">确 定</el-button>
+		</template>
+	</el-dialog>
 </template>
 
 <script setup lang="ts" name="systemRoleDialog">
-import { reactive, ref } from 'vue';
+import { computed, nextTick, reactive, ref, watch } from 'vue';
+import type { FormInstance } from 'element-plus';
+import { i18n } from '/@/i18n/index';
+import type { LocalMenu } from '/@/types/api';
 
-// 定义子组件向父组件传值/事件
-const emit = defineEmits(['refresh']);
+const props = defineProps({
+	modelValue: { type: Boolean, default: false },
+	initial: { type: Object, default: () => ({}) },
+	menus: { type: Array as () => LocalMenu[], default: () => [] },
+});
+const emit = defineEmits(['update:modelValue', 'submit']);
 
-// 定义变量内容
-const roleDialogFormRef = ref();
-const state = reactive({
-	ruleForm: {
-		roleName: '', // 角色名称
-		roleSign: '', // 角色标识
-		sort: 0, // 排序
-		status: true, // 角色状态
-		describe: '', // 角色描述
-	},
-	menuData: [] as TreeType[],
-	menuProps: {
-		children: 'children',
-		label: 'label',
-	},
-	dialog: {
-		isShowDialog: false,
-		type: '',
-		title: '',
-		submitTxt: '',
-	},
+const buttonPermissions = ['btn.add', 'btn.edit', 'btn.del', 'btn.link', 'btn.export'];
+const formRef = ref<FormInstance>();
+const treeRef = ref();
+const form = reactive<EmptyObjectType>({ roleName: '', dataScope: '全部', menuPaths: [], btnPermissions: [] });
+
+const visible = computed({
+	get: () => props.modelValue,
+	set: (value: boolean) => emit('update:modelValue', value),
+});
+const rules = {
+	roleName: [{ required: true, message: '请输入角色名称', trigger: 'blur' }],
+	dataScope: [{ required: true, message: '请选择数据范围', trigger: 'change' }],
+};
+const treeData = computed(() => {
+	const build = (pid: number | null): any[] =>
+		props.menus
+			.filter((menu) => menu.pid === pid)
+			.map((menu) => ({
+				path: menu.path,
+				label: i18n.global.t(menu.meta.title),
+				children: build(menu.id),
+			}));
+	return build(null);
 });
 
-// 打开弹窗
-const openDialog = (type: string, row: RowRoleType) => {
-	if (type === 'edit') {
-		state.ruleForm = row;
-		state.dialog.title = '修改角色';
-		state.dialog.submitTxt = '修 改';
-	} else {
-		state.dialog.title = '新增角色';
-		state.dialog.submitTxt = '新 增';
-		// 清空表单，此项需加表单验证才能使用
-		// nextTick(() => {
-		// 	roleDialogFormRef.value.resetFields();
-		// });
+watch(
+	() => props.modelValue,
+	(value) => {
+		if (!value) return;
+		Object.assign(form, {
+			id: props.initial.id,
+			code: props.initial.code || `role_${Date.now()}`,
+			roleName: props.initial.roleName || '',
+			dataScope: props.initial.dataScope || '全部',
+			menuPaths: props.initial.menuPaths || [],
+			btnPermissions: props.initial.btnPermissions || [],
+		});
+		nextTick(() => treeRef.value?.setCheckedKeys(form.menuPaths));
 	}
-	state.dialog.isShowDialog = true;
-	getMenuData();
-};
-// 关闭弹窗
-const closeDialog = () => {
-	state.dialog.isShowDialog = false;
-};
-// 取消
-const onCancel = () => {
-	closeDialog();
-};
-// 提交
+);
+
 const onSubmit = () => {
-	closeDialog();
-	emit('refresh');
-	// if (state.dialog.type === 'add') { }
+	formRef.value?.validate((valid: boolean) => {
+		if (!valid) return;
+		emit('submit', {
+			...form,
+			menuPaths: treeRef.value?.getCheckedKeys() || [],
+		});
+		visible.value = false;
+	});
 };
-// 获取菜单结构数据
-const getMenuData = () => {
-	state.menuData = [
-		{
-			id: 1,
-			label: '系统管理',
-			children: [
-				{
-					id: 11,
-					label: '菜单管理',
-					children: [
-						{
-							id: 111,
-							label: '菜单新增',
-						},
-						{
-							id: 112,
-							label: '菜单修改',
-						},
-						{
-							id: 113,
-							label: '菜单删除',
-						},
-						{
-							id: 114,
-							label: '菜单查询',
-						},
-					],
-				},
-				{
-					id: 12,
-					label: '角色管理',
-					children: [
-						{
-							id: 121,
-							label: '角色新增',
-						},
-						{
-							id: 122,
-							label: '角色修改',
-						},
-						{
-							id: 123,
-							label: '角色删除',
-						},
-						{
-							id: 124,
-							label: '角色查询',
-						},
-					],
-				},
-				{
-					id: 13,
-					label: '用户管理',
-					children: [
-						{
-							id: 131,
-							label: '用户新增',
-						},
-						{
-							id: 132,
-							label: '用户修改',
-						},
-						{
-							id: 133,
-							label: '用户删除',
-						},
-						{
-							id: 134,
-							label: '用户查询',
-						},
-					],
-				},
-			],
-		},
-		{
-			id: 2,
-			label: '权限管理',
-			children: [
-				{
-					id: 21,
-					label: '前端控制',
-					children: [
-						{
-							id: 211,
-							label: '页面权限',
-						},
-						{
-							id: 212,
-							label: '页面权限',
-						},
-					],
-				},
-				{
-					id: 22,
-					label: '后端控制',
-					children: [
-						{
-							id: 221,
-							label: '页面权限',
-						},
-					],
-				},
-			],
-		},
-	];
-};
-
-// 暴露变量
-defineExpose({
-	openDialog,
-});
 </script>
-
-<style scoped lang="scss">
-.system-role-dialog-container {
-	.menu-data-tree {
-		width: 100%;
-		border: 1px solid var(--el-border-color);
-		border-radius: var(--el-input-border-radius, var(--el-border-radius-base));
-		padding: 5px;
-	}
-}
-</style>

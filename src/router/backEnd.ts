@@ -1,5 +1,4 @@
 import { RouteRecordRaw } from 'vue-router';
-import { storeToRefs } from 'pinia';
 import pinia from '/@/stores/index';
 import { useUserInfo } from '/@/stores/userInfo';
 import { useRequestOldRoutes } from '/@/stores/requestOldRoutes';
@@ -9,12 +8,13 @@ import { dynamicRoutes, notFoundAndNoPower } from '/@/router/route';
 import { formatTwoStageRoutes, formatFlatteningRoutes, router } from '/@/router/index';
 import { useRoutesList } from '/@/stores/routesList';
 import { useTagsViewRoutes } from '/@/stores/tagsViewRoutes';
-import { useMenuApi } from '/@/api/menu/index';
+import { useResourceApi } from '/@/api/resource';
+
+const menuApi = useResourceApi();
 
 // 后端控制路由
 
 // 引入 api 请求接口
-const menuApi = useMenuApi();
 
 /**
  * 获取目录下的 .vue、.tsx 全部文件
@@ -106,15 +106,9 @@ export async function setAddRoute() {
  * @description isRequestRoutes 为 true，则开启后端控制路由
  * @returns 返回后端路由菜单数据
  */
-export function getBackEndControlRoutes() {
-	// 模拟 admin 与 test
-	const stores = useUserInfo(pinia);
-	const { userInfos } = storeToRefs(stores);
-	const auth = userInfos.value.roles[0];
-	// 管理员 admin
-	if (auth === 'admin') return menuApi.getAdminMenu();
-	// 其它用户 test
-	else return menuApi.getTestMenu();
+export async function getBackEndControlRoutes() {
+	const res = await menuApi.list('menus');
+	return { data: (res.data as any[]) || [] };
 }
 
 /**

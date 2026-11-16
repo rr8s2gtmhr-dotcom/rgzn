@@ -1,3 +1,17 @@
+## 本项目启动说明（前后端分离 + MySQL）
+
+本项目已改造为真实数据库驱动：后端在 `server/`（FastAPI + MySQL），业务数据、登录权限、主题配置均存于 MySQL `rgzn-ai` 库；浏览器本地缓存仅保留 tagsView、锁屏等临时界面状态。
+
+启动顺序：
+
+1. 确认 MySQL 已运行，且 `server/.env` 中的连接信息正确（该文件含密码，已被 git 忽略）。
+2. 启动后端：`cd server && pip install -r requirements.txt && python -m uvicorn app.main:app --host 0.0.0.0 --port 8001`
+   （首次启动自动建表并导入初始数据，重复启动不会重复导入。详细说明见 `server/README.md`。）
+3. 启动前端：`npm install && npm run dev`（开发接口地址在 `.env.development` 的 `VITE_API_URL`，默认 `http://127.0.0.1:8001/api`）。
+4. 默认账号：`admin / 123456`（管理员）、`test / 123456`（巡检员），首次部署请修改密码与 `server/.env` 中的 `JWT_SECRET`。
+
+---
+
 <div align="center">
 	<img src="https://i.hd-r.cn/6ce52e5724fae609444b5b48bdc4accb.png">
 	<p align="center">

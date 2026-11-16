@@ -307,7 +307,38 @@ declare type TableSearchType = {
 	prop: string;
 	placeholder: string;
 	required: boolean;
-	type: string;
+	type: 'input' | 'date' | 'daterange' | 'select' | string;
+	startPlaceholder?: string;
+	endPlaceholder?: string;
+	options?: SelectOptionType[];
+};
+
+declare type BusinessTableState = {
+	tableData: {
+		data: EmptyObjectType[];
+		header: TableHeaderType[];
+		config: {
+			total: number;
+			loading: boolean;
+			isBorder: boolean;
+			isSelection: boolean;
+			isSerialNo: boolean;
+			isOperate: boolean;
+			isEdit?: boolean;
+			disableDeleteConfirm?: boolean;
+			enableHeaderColumnSetting?: boolean;
+		};
+		search: TableSearchType[];
+		param: EmptyObjectType;
+	};
+};
+
+declare type CrudField = {
+	key: string;
+	label: string;
+	type?: 'input' | 'textarea' | 'date' | 'select' | 'switch' | 'number';
+	placeholder?: string;
+	required?: boolean;
 	options?: SelectOptionType[];
 };
 

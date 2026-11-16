@@ -1,135 +1,117 @@
 <template>
 	<div class="system-dept-container layout-padding">
-		<el-card shadow="hover" class="layout-padding-auto">
-			<div class="system-dept-search mb15">
-				<el-input size="default" placeholder="请输入部门名称" style="max-width: 180px"> </el-input>
-				<el-button size="default" type="primary" class="ml10">
-					<el-icon>
-						<ele-Search />
-					</el-icon>
-					查询
-				</el-button>
-				<el-button size="default" type="success" class="ml10" @click="onOpenAddDept('add')">
-					<el-icon>
-						<ele-FolderAdd />
-					</el-icon>
-					新增部门
-				</el-button>
+		<div class="system-dept-padding layout-padding-view layout-padding-auto">
+			<div class="system-dept-actions mb15">
+				<el-button type="success" @click="onAdd">新增单位</el-button>
 			</div>
-			<el-table
+			<Table
+				ref="tableRef"
 				:data="state.tableData.data"
-				v-loading="state.tableData.loading"
-				style="width: 100%"
-				row-key="id"
-				default-expand-all
-				:tree-props="{ children: 'children', hasChildren: 'hasChildren' }"
-			>
-				<el-table-column prop="deptName" label="部门名称" show-overflow-tooltip> </el-table-column>
-				<el-table-column label="排序" show-overflow-tooltip width="80">
-					<template #default="scope">
-						{{ scope.$index }}
-					</template>
-				</el-table-column>
-				<el-table-column prop="status" label="部门状态" show-overflow-tooltip>
-					<template #default="scope">
-						<el-tag type="success" v-if="scope.row.status">启用</el-tag>
-						<el-tag type="info" v-else>禁用</el-tag>
-					</template>
-				</el-table-column>
-				<el-table-column prop="describe" label="部门描述" show-overflow-tooltip></el-table-column>
-				<el-table-column prop="createTime" label="创建时间" show-overflow-tooltip></el-table-column>
-				<el-table-column label="操作" show-overflow-tooltip width="140">
-					<template #default="scope">
-						<el-button size="small" text type="primary" @click="onOpenAddDept('add')">新增</el-button>
-						<el-button size="small" text type="primary" @click="onOpenEditDept('edit', scope.row)">修改</el-button>
-						<el-button size="small" text type="primary" @click="onTabelRowDel(scope.row)">删除</el-button>
-					</template>
-				</el-table-column>
-			</el-table>
-		</el-card>
-		<DeptDialog ref="deptDialogRef" @refresh="getTableData()" />
+				:header="state.tableData.header"
+				:config="state.tableData.config"
+				class="system-dept-table"
+				@delRow="onDelRow"
+				@editRow="onEditRow"
+				@pageChange="onPageChange"
+				@sortHeader="onSortHeader"
+			/>
+			<CrudDialog v-model="state.dialogVisible" :title="state.dialogTitle" :fields="state.fields" :initial="state.editing" @submit="onDialogSubmit" />
+		</div>
 	</div>
 </template>
 
 <script setup lang="ts" name="systemDept">
-import { defineAsyncComponent, ref, reactive, onMounted } from 'vue';
-import { ElMessageBox, ElMessage } from 'element-plus';
+import { defineAsyncComponent, reactive, ref, onMounted } from 'vue';
+import { useBusinessCrud } from '/@/utils/businessCrud';
 
-// 引入组件
-const DeptDialog = defineAsyncComponent(() => import('/@/views/system/dept/dialog.vue'));
+const Table = defineAsyncComponent(() => import('/@/components/table/index.vue'));
+const CrudDialog = defineAsyncComponent(() => import('/@/components/crudDialog/index.vue'));
 
-// 定义变量内容
-const deptDialogRef = ref();
-const state = reactive<SysDeptState>({
+const crud = useBusinessCrud('units');
+const tableRef = ref<RefType>();
+const state = reactive<BusinessTableState & { dialogVisible: boolean; dialogTitle: string; editing: EmptyObjectType; fields: CrudField[] }>({
+	dialogVisible: false,
+	dialogTitle: '',
+	editing: {},
+	fields: [
+		{ key: 'deptName', label: '部门名称', required: true },
+		{ key: 'deptShortName', label: '部门简称' },
+		{ key: 'expireTime', label: '到期时间', type: 'date' },
+	],
 	tableData: {
 		data: [],
-		total: 0,
-		loading: false,
-		param: {
-			pageNum: 1,
-			pageSize: 10,
+		header: [
+			{ key: 'deptName', colWidth: '', title: '部门名称', type: 'text', width: '', isCheck: true },
+			{ key: 'deptShortName', colWidth: '', title: '部门简称', type: 'text', width: '', isCheck: true },
+			{ key: 'expireTime', colWidth: '160', title: '到期时间', type: 'text', width: '', isCheck: true },
+		],
+		config: {
+			total: 0,
+			loading: false,
+			isBorder: false,
+			isSelection: false,
+			isSerialNo: false,
+			isOperate: true,
+			isEdit: true,
+			disableDeleteConfirm: true,
+			enableHeaderColumnSetting: true,
 		},
+		search: [],
+		param: { pageNum: 1, pageSize: 10 },
 	},
 });
 
-// 初始化表格数据
-const getTableData = () => {
+const getTableData = async () => {
 	state.tableData.loading = true;
-	state.tableData.data = [];
-	state.tableData.data.push({
-		deptName: 'vueNextAdmin',
-		createTime: new Date().toLocaleString(),
-		status: true,
-		sort: Math.random(),
-		describe: '顶级部门',
-		id: Math.random(),
-		children: [
-			{
-				deptName: 'IT外包服务',
-				createTime: new Date().toLocaleString(),
-				status: true,
-				sort: Math.random(),
-				describe: '总部',
-				id: Math.random(),
-			},
-			{
-				deptName: '资本控股',
-				createTime: new Date().toLocaleString(),
-				status: true,
-				sort: Math.random(),
-				describe: '分部',
-				id: Math.random(),
-			},
-		],
-	});
-	state.tableData.total = state.tableData.data.length;
-	setTimeout(() => {
+	try {
+		const { rows, total } = await crud.page(state.tableData.param);
+		state.tableData.data = rows;
+		state.tableData.config.total = total;
+	} finally {
 		state.tableData.loading = false;
-	}, 500);
+	}
 };
-// 打开新增菜单弹窗
-const onOpenAddDept = (type: string) => {
-	deptDialogRef.value.openDialog(type);
+const onPageChange = (page: TableDemoPageType) => {
+	state.tableData.param.pageNum = page.pageNum;
+	state.tableData.param.pageSize = page.pageSize;
 };
-// 打开编辑菜单弹窗
-const onOpenEditDept = (type: string, row: DeptTreeType) => {
-	deptDialogRef.value.openDialog(type, row);
+const onSortHeader = (data: TableHeaderType[]) => {
+	state.tableData.header = data;
 };
-// 删除当前行
-const onTabelRowDel = (row: DeptTreeType) => {
-	ElMessageBox.confirm(`此操作将永久删除部门：${row.deptName}, 是否继续?`, '提示', {
-		confirmButtonText: '删除',
-		cancelButtonText: '取消',
-		type: 'warning',
-	})
-		.then(() => {
-			getTableData();
-			ElMessage.success('删除成功');
-		})
-		.catch(() => {});
+const onAdd = () => {
+	state.editing = {};
+	state.dialogTitle = '新增单位';
+	state.dialogVisible = true;
 };
-// 页面加载时
-onMounted(() => {
+const onEditRow = (row: EmptyObjectType) => {
+	state.editing = { ...row };
+	state.dialogTitle = '修改单位';
+	state.dialogVisible = true;
+};
+const onDialogSubmit = async (form: EmptyObjectType) => {
+	await crud.submit(form);
 	getTableData();
-});
+};
+const onDelRow = async (row: EmptyObjectType) => {
+	try {
+		await crud.remove(row, `单位 ${row.deptName}`);
+		getTableData();
+	} catch {
+		// 用户取消删除
+	}
+};
+
+onMounted(getTableData);
 </script>
+
+<style scoped lang="scss">
+.system-dept-container {
+	.system-dept-padding {
+		padding: 15px;
+	}
+	.system-dept-table {
+		flex: 1;
+		overflow: hidden;
+	}
+}
+</style>

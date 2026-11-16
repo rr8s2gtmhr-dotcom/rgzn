@@ -76,11 +76,6 @@ export const buildConfig = {
 				// 	path: 'Sortable.min.js',
 				// },
 				// {
-				// 	name: 'qrcodejs2-fixes',
-				// 	var: 'QRCode',
-				// 	path: 'qrcode.min.js',
-				// },
-				// {
 				// 	name: 'print-js',
 				// 	var: 'printJS',
 				// 	path: 'dist/print.min.js',
@@ -116,7 +111,6 @@ export const buildConfig = {
 		// 'jsplumb',
 		// 'cropperjs',
 		// 'sortablejs',
-		// 'qrcodejs2-fixes',
 		// 'print-js',
 		// '@wangeditor/editor',
 		// '@wangeditor/editor-for-vue',

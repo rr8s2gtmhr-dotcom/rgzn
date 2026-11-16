@@ -44,7 +44,16 @@
 			</el-col>
 			<el-col :span="1"></el-col>
 			<el-col :span="8">
-				<el-button class="login-content-code" v-waves>1234</el-button>
+				<canvas
+					ref="canvasRef"
+					class="login-content-code"
+					role="button"
+					tabindex="0"
+					:title="t('message.account.codeRefreshText')"
+					:aria-label="t('message.account.codeRefreshText')"
+					@click="handleRefreshCaptcha"
+					@keydown.enter="handleRefreshCaptcha"
+				></canvas>
 			</el-col>
 		</el-form-item>
 		<el-form-item class="login-animation4">
@@ -60,7 +69,6 @@ import { reactive, computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
 import { useI18n } from 'vue-i18n';
-import Cookies from 'js-cookie';
 import { storeToRefs } from 'pinia';
 import { useThemeConfig } from '/@/stores/themeConfig';
 import { initFrontEndControlRoutes } from '/@/router/frontEnd';
@@ -68,6 +76,8 @@ import { initBackEndControlRoutes } from '/@/router/backEnd';
 import { Session } from '/@/utils/storage';
 import { formatAxis } from '/@/utils/formatTime';
 import { NextLoading } from '/@/utils/loading';
+import { useCaptcha } from './useCaptcha';
+import { useAuthApi } from '/@/api/auth';
 
 // 定义变量内容
 const { t } = useI18n();
@@ -75,17 +85,23 @@ const storesThemeConfig = useThemeConfig();
 const { themeConfig } = storeToRefs(storesThemeConfig);
 const route = useRoute();
 const router = useRouter();
+const { canvasRef, captchaCode, refresh: refreshCaptcha } = useCaptcha();
 const state = reactive({
 	isShowPassword: false,
 	ruleForm: {
-		userName: 'admin',
-		password: '123456',
-		code: '1234',
+		userName: '',
+		password: '',
+		code: '',
 	},
 	loading: {
 		signIn: false,
 	},
 });
+
+const handleRefreshCaptcha = () => {
+	state.ruleForm.code = '';
+	refreshCaptcha();
+};
 
 // 时间获取
 const currentTime = computed(() => {
@@ -93,11 +109,34 @@ const currentTime = computed(() => {
 });
 // 登录
 const onSignIn = async () => {
+	const { userName, password, code } = state.ruleForm;
+	if (!userName.trim()) {
+		ElMessage.warning(t('message.account.userNameRequired'));
+		return;
+	}
+	if (!password) {
+		ElMessage.warning(t('message.account.passwordRequired'));
+		return;
+	}
+	if (!code.trim()) {
+		ElMessage.warning(t('message.account.codeRequired'));
+		return;
+	}
+	if (code.trim().toUpperCase() !== captchaCode.value) {
+		ElMessage.warning(t('message.account.codeIncorrect'));
+		handleRefreshCaptcha();
+		return;
+	}
 	state.loading.signIn = true;
-	// 存储 token 到浏览器缓存
-	Session.set('token', Math.random().toString(36).substr(0));
-	// 模拟数据，对接接口时，记得删除多余代码及对应依赖的引入。用于 `/src/stores/userInfo.ts` 中不同用户登录判断（模拟数据）
-	Cookies.set('userName', state.ruleForm.userName);
+	try {
+		const res = await useAuthApi().login({ userName: state.ruleForm.userName, password: state.ruleForm.password });
+		const result = res.data;
+		Session.set('token', result.token);
+		Session.remove('userInfo');
+	} catch {
+		state.loading.signIn = false;
+		return;
+	}
 	if (!themeConfig.value.isRequestRoutes) {
 		// 前端控制路由，2、请注意执行顺序
 		const isNoPower = await initFrontEndControlRoutes();
@@ -159,10 +198,13 @@ const signInSuccess = (isNoPower: boolean | undefined) => {
 		}
 	}
 	.login-content-code {
+		display: block;
 		width: 100%;
-		padding: 0;
-		font-weight: bold;
-		letter-spacing: 5px;
+		height: 40px;
+		border: 1px solid var(--el-border-color);
+		border-radius: 4px;
+		background-color: var(--el-color-white);
+		cursor: pointer;
 	}
 	.login-content-submit {
 		width: 100%;
